@@ -28,7 +28,7 @@
 #define LORA_CONNECTED "LoRa Connected..."
 #define LORA_ERR "LoRa Failed...Check connections"
 // Insert Firebase project API Key
-#define API_KEY "AIzaSyCfnEKIzTU3H08zhlOKs8np3DU8QHAufIY"
+#define API_KEY "ENTER_API_KEY"
 // Insert Authorized Username and Corresponding Password
 #define USER_EMAIL "user@lora.com"
 #define USER_PASSWORD "loraaa"
@@ -37,6 +37,8 @@
 
 /* variable Constanst*/
 const long frequency = 915E6;
+const char* ssid = "ENTER_WIFI_SSID";
+const char* pass = "ENTER_WIFI_PASSWORD";
 
 /* variables */
 String temp;
