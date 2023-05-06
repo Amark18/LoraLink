@@ -4,6 +4,10 @@
 #include <BluetoothSerial.h>
 #include "DHT20.h"
 #include <Wire.h>
+#include <WiFi.h>
+#include <Firebase_ESP_Client.h>
+#include "addons/TokenHelper.h"
+#include "addons/RTDBHelper.h"
 
 /* Constants */
 #define BAUD_RATE 9600
@@ -23,6 +27,13 @@
 #define DI0 17
 #define LORA_CONNECTED "LoRa Connected..."
 #define LORA_ERR "LoRa Failed...Check connections"
+// Insert Firebase project API Key
+#define API_KEY "AIzaSyCfnEKIzTU3H08zhlOKs8np3DU8QHAufIY"
+// Insert Authorized Username and Corresponding Password
+#define USER_EMAIL "user@lora.com"
+#define USER_PASSWORD "loraaa"
+// Insert RTDB URLefine the RTDB URL
+#define DATABASE_URL "https://lora-link-default-rtdb.firebaseio.com/"
 
 /* variable Constanst*/
 const long frequency = 915E6;
@@ -33,16 +44,29 @@ String humidity;
 String lastMessageSentViaBluetooth = "";
 String sendPacketBack = "";
 String tempString = "";
+// Variables to save database paths
+String messagePath = "/message";
+String tempPath = "/temp";
+String humidityPath = "/humidity";
 
 /* objects */
 BluetoothSerial SerialBT;
 DHT20 DHT;
+// Define Firebase objects
+FirebaseData stream;
+FirebaseAuth auth;
+FirebaseConfig config;
+FirebaseData fbdo;
+FirebaseJson json;
 
 /* methods */
 void recieveBluetooth();
 void sendPacket(String);
 String readTempSensor();
 void sendVialBluetooth(String);
+void pushToFirebase(String);
+String getTemp();
+String getHumidity();
 
 // ##############################################
 //                    ESP32
@@ -61,9 +85,23 @@ void IRAM_ATTR onReceive(int packetSize) {
   }
 }
 
+// Initialize WiFi
+void initWiFi() {
+  WiFi.begin(ssid, pass);
+  Serial.print("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
+    delay(1000);
+  }
+  Serial.println(WiFi.localIP());
+  Serial.println();
+}
+
 void setup() {
   // initialize serial
   Serial.begin(BAUD_RATE);
+
+  initWiFi();
 
   Wire.begin(25, 33); // SDA, SCL
 
@@ -92,6 +130,16 @@ void setup() {
 
   // begin sensor readings
   DHT.begin();
+
+  // Set up Firebase
+  config.api_key = API_KEY;
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+  config.database_url = DATABASE_URL;
+  Firebase.reconnectWiFi(true);
+  config.token_status_callback = tokenStatusCallback; 
+  config.max_token_generation_retry = 5;
+  Firebase.begin(&config, &auth);
 }
 
 
@@ -104,7 +152,10 @@ void loop() {
     sendPacketBack = "";
   }
   else if(sendPacketBack.length() > 0){
+    // send to Android device via bluetooth
     sendVialBluetooth(sendPacketBack);
+    // upload to firebase
+    pushToFirebase(sendPacketBack);
     delay(1500);
     ESP.restart();
   }
@@ -176,4 +227,50 @@ String readTempSensor(){
   tempString += "%"; 
 
   return tempString;
+}
+
+String getHumidity(){
+  // read temperature & humidty sensor data
+  // following two lines are used instead of just DHT.read() so
+  // that no connection (unplugged sensor) can be detected easily
+  DHT.requestData(); delay(100);
+  DHT.readData(); DHT.convert();
+  int status = DHT.readStatus();
+
+  if (status >= DHT20_OK && status <= DHT20_OK_MAX)
+    humidity = String(DHT.getHumidity());
+
+  return humidity;
+}
+
+String getTemp(){
+  // read temperature & humidty sensor data
+  // following two lines are used instead of just DHT.read() so
+  // that no connection (unplugged sensor) can be detected easily
+  DHT.requestData(); delay(100);
+  DHT.readData(); DHT.convert();
+  int status = DHT.readStatus();
+
+  if (status >= DHT20_OK && status <= DHT20_OK_MAX)
+    temp = String((DHT.getTemperature() * 9/5) + 32);
+
+  return temp;
+}
+
+void pushToFirebase(String message){
+  // Create a JSON object with "message", "temp", and "humidity" fields
+  json.set(messagePath.c_str(), message);
+  json.set(tempPath.c_str(), getTemp());
+  json.set(humidityPath.c_str(), getHumidity());
+
+  // Push the JSON object to Firebase
+  Firebase.RTDB.pushJSON(&fbdo, "/data", &json);
+
+  // Check if the data was successfully pushed
+  if (fbdo.httpCode() == 200) {
+    Serial.println("Data was successfully pushed to Firebase!");
+  } else {
+    Serial.println("Error pushing data to Firebase");
+    Serial.println(fbdo.errorReason());
+  }
 }

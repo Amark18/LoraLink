@@ -37,7 +37,6 @@ import android.widget.Toast;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.UUID;
-import com.akapps.loralink.R;
 import io.realm.Realm;
 import io.realm.RealmConfiguration;
 import io.realm.RealmResults;
